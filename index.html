@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<script type="application/json" id="cowork-artifact-meta">
+{
+  "name": "Mc Imp Tracker",
+  "schemaVersion": 1,
+  "description": "Member Comms Implementation Tracker — live pizza-tracker dashboard reading from the Member Comms Directory OPS Google Sheet. Shows all active client implementations with per-milestone status and notes. Automatically parses both the IMP Tracker tab (when set up) and the existing tickets table as a fallback.",
+  "mcpTools": [
+    "mcp__51e71b12-c295-4776-979b-002eee43853e__read_file_content"
+  ],
+  "mcpServerNames": [
+    "Google Drive"
+  ]
+}
+</script>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MC Implementation Tracker</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #f5f4f0; color: #1a1a1a; min-height: 100vh; }
+
+/* Header */
+.top-bar { background: white; border-bottom: 1px solid #e8e5de; padding: 14px 24px; position: sticky; top: 0; z-index: 50; }
+.top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.top-row h1 { font-size: 16px; font-weight: 600; color: #1a1a1a; display: flex; align-items: center; gap: 8px; }
+.top-row h1 span { font-size: 18px; }
+.subtitle { font-size: 12px; color: #999; margin-top: 1px; }
+.btn-refresh { font-size: 12px; padding: 5px 14px; border: 1px solid #ddd; border-radius: 20px; background: white; cursor: pointer; color: #666; transition: all 0.15s; }
+.btn-refresh:hover { background: #f0ede6; border-color: #ccc; }
+
+/* Filters */
+.filters { display: flex; gap: 6px; }
+.f-btn { font-size: 11px; padding: 3px 12px; border-radius: 20px; border: 1px solid #e0ddd6; background: white; cursor: pointer; color: #666; transition: all 0.15s; }
+.f-btn.on { background: #0F6E56; border-color: #0F6E56; color: white; }
+.f-btn:hover:not(.on) { background: #f5f4f0; }
+
+/* Cards */
+.card-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.card { background: white; border: 1px solid #e8e5de; border-radius: 12px; overflow: hidden; }
+.card.blocked-card { border-left: 3px solid #D85A30; }
+
+.card-top { padding: 16px 20px 12px; cursor: pointer; user-select: none; }
+.card-meta { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+.client-name { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+.client-sub { font-size: 12px; color: #999; margin-top: 2px; }
+.badges { display: flex; align-items: center; gap: 8px; }
+.badge { font-size: 10px; font-weight: 500; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+.b-active { background: #E1F5EE; color: #0F6E56; }
+.b-blocked { background: #FAECE7; color: #993C1D; }
+.b-complete { background: #EAF3DE; color: #3B6D11; }
+.go-live-tag { font-size: 11px; color: #aaa; }
+.jira-link { font-size: 11px; color: #aaa; text-decoration: none; }
+.jira-link:hover { color: #555; }
+
+/* Timeline track */
+.track-wrap { position: relative; height: 52px; margin: 0 4px; }
+.track-bg { position: absolute; top: 14px; left: 15px; right: 15px; height: 3px; background: #ede9e0; border-radius: 2px; }
+.track-done { height: 100%; background: #1D9E75; border-radius: 2px; }
+.env { position: absolute; top: 0px; font-size: 18px; transform: translateX(-50%); z-index: 5; pointer-events: none; }
+.dots { display: flex; justify-content: space-between; position: absolute; top: 0; left: 0; right: 0; }
+.dot-wrap { display: flex; flex-direction: column; align-items: center; width: calc(100% / 7); }
+.dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; border: 2px solid #e0ddd6; background: white; z-index: 3; position: relative; }
+.dot.done { background: #1D9E75; border-color: #1D9E75; color: white; }
+.dot.current { border-color: #1D9E75; border-width: 2.5px; color: #1D9E75; }
+.dot.blocked-dot { border-color: #D85A30; background: #fff5f2; }
+.dot-label { font-size: 9.5px; color: #aaa; text-align: center; margin-top: 5px; line-height: 1.3; max-width: 52px; }
+.dot-label.cur-label { color: #0F6E56; font-weight: 600; }
+.dot-label.blk-label { color: #D85A30; }
+
+/* Detail panel */
+.detail-panel { display: none; border-top: 1px solid #f0ede6; padding: 14px 20px 16px; background: #faf9f6; }
+.detail-panel.open { display: block; }
+.detail-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.detail-cell { background: white; border: 1px solid #ede9e0; border-radius: 8px; padding: 10px 10px 12px; }
+.detail-cell.cell-done { border-color: #b8e8d0; background: #f8fdf9; }
+.detail-cell.cell-current { border-color: #1D9E75; }
+.detail-cell.cell-blocked { border-color: #f5c4b3; background: #fdf7f5; }
+.d-stage { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #bbb; margin-bottom: 5px; }
+.d-stage.done-lbl { color: #1D9E75; }
+.d-stage.cur-lbl { color: #1D9E75; }
+.d-stage.blk-lbl { color: #D85A30; }
+.d-note { font-size: 11px; color: #444; line-height: 1.45; }
+.d-empty { font-size: 11px; color: #ccc; font-style: italic; }
+.chevron { font-size: 12px; color: #ccc; margin-left: 6px; transition: transform 0.2s; display: inline-block; }
+.chevron.open { transform: rotate(180deg); }
+
+/* Setup notice */
+.notice { background: #E1F5EE; border: 1px solid #5DCAA5; border-radius: 10px; margin: 12px 20px; padding: 14px 18px; font-size: 13px; color: #0F6E56; line-height: 1.6; }
+.notice strong { display: block; font-size: 14px; margin-bottom: 6px; }
+
+/* States */
+.loading { padding: 48px 24px; text-align: center; color: #999; }
+.spinner { width: 28px; height: 28px; border: 3px solid #eee; border-top-color: #1D9E75; border-radius: 50%; animation: spin 0.75s linear infinite; margin: 0 auto 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.footer { text-align: right; padding: 6px 22px 14px; font-size: 11px; color: #ccc; }
+.count-badge { font-size: 11px; background: #f0ede6; color: #888; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="top-row">
+    <div>
+      <h1><span>✉</span> Member Comms — Implementation Tracker <span class="count-badge" id="clientCount">—</span></h1>
+      <div class="subtitle" id="subtitle">Loading from Member Comms Directory OPS...</div>
+    </div>
+    <button class="btn-refresh" onclick="loadData()">↻ Refresh</button>
+  </div>
+  <div class="filters">
+    <button class="f-btn on" onclick="setFilter('all',this)">All</button>
+    <button class="f-btn" onclick="setFilter('active',this)">In Progress</button>
+    <button class="f-btn" onclick="setFilter('blocked',this)">Blocked / Awaiting</button>
+    <button class="f-btn" onclick="setFilter('complete',this)">Complete</button>
+  </div>
+</div>
+
+<div id="main-content">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>Fetching latest data...</div>
+  </div>
+</div>
+<div class="footer" id="footer"></div>
+
+<script>
+const LABELS = ['Kickoff','Config','Proofs','Vendor','Client Review','Approval','Live'];
+const FULL = ['Kickoff & Intake','Config & Requirements','Initial Proofs to Vendor','Vendor Proof Review','Client Proof Review','Production Approval','Live / Mailed'];
+
+let allClients = [];
+let filter = 'all';
+
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  render();
+}
+
+function clientStatus(c) {
+  if (c.currentStage >= 7) return 'complete';
+  if (c.blocked) return 'blocked';
+  return 'active';
+}
+
+function render() {
+  const list = allClients.filter(c => {
+    if (filter === 'all') return true;
+    return clientStatus(c) === filter;
+  });
+
+  const sorted = [...list].sort((a, b) => {
+    const order = { blocked: 0, active: 1, complete: 2 };
+    return order[clientStatus(a)] - order[clientStatus(b)];
+  });
+
+  if (sorted.length === 0) {
+    document.getElementById('main-content').innerHTML = '<div class="loading" style="padding:32px"><div>No clients match this filter.</div></div>';
+    return;
+  }
+
+  const html = '<div class="card-list">' + sorted.map((c, i) => buildCard(c, i)).join('') + '</div>';
+  document.getElementById('main-content').innerHTML = html;
+  document.getElementById('clientCount').textContent = allClients.length + ' active';
+}
+
+function buildCard(c, idx) {
+  const st = clientStatus(c);
+  const stage = Math.max(1, Math.min(7, c.currentStage || 1));
+
+  const fillPct = stage <= 1 ? 0 : ((stage - 1) / 6) * 100;
+  const envLeft = ((stage - 1) / 6) * 100;
+
+  const badgeClass = st === 'complete' ? 'b-complete' : st === 'blocked' ? 'b-blocked' : 'b-active';
+  const badgeText = st === 'complete' ? 'Complete' : st === 'blocked' ? 'Blocked / Awaiting' : 'In Progress';
+
+  const dots = LABELS.map((lbl, mi) => {
+    const ms = mi + 1;
+    const isDone = ms < stage;
+    const isCur = ms === stage;
+    const isBlk = isCur && c.blocked;
+    const dotCls = isDone ? 'done' : isBlk ? 'blocked-dot' : isCur ? 'current' : '';
+    const lblCls = isDone ? '' : isBlk ? 'blk-label' : isCur ? 'cur-label' : '';
+    return `<div class="dot-wrap">
+      <div class="dot ${dotCls}">${isDone ? '✓' : ''}</div>
+      <div class="dot-label ${lblCls}">${lbl}</div>
+    </div>`;
+  }).join('');
+
+  const details = FULL.map((f, mi) => {
+    const ms = mi + 1;
+    const isDone = ms < stage;
+    const isCur = ms === stage;
+    const isBlk = isCur && c.blocked;
+    const note = (c.stageNotes && c.stageNotes[mi]) || '';
+    const cellCls = isDone ? 'cell-done' : isBlk ? 'cell-blocked' : isCur ? 'cell-current' : '';
+    const lblCls = isDone ? 'done-lbl' : isBlk ? 'blk-lbl' : isCur ? 'cur-lbl' : '';
+    return `<div class="detail-cell ${cellCls}">
+      <div class="d-stage ${lblCls}">${f}</div>
+      ${note ? `<div class="d-note">${note}</div>` : `<div class="d-empty">—</div>`}
+    </div>`;
+  }).join('');
+
+  const jiraHtml = c.jiraUrl ? `<a class="jira-link" href="${c.jiraUrl}" target="_blank" onclick="event.stopPropagation()">Jira ↗</a>` : '';
+  const goLiveHtml = c.goLiveDate ? `<span class="go-live-tag">Go-live: ${c.goLiveDate}</span>` : '';
+
+  return `<div class="card${st === 'blocked' ? ' blocked-card' : ''}" id="card-${idx}">
+    <div class="card-top" onclick="toggle(${idx})">
+      <div class="card-meta">
+        <div>
+          <div class="client-name">${c.clientName} <span class="chevron" id="chev-${idx}">▾</span></div>
+          <div class="client-sub">${c.account || ''}</div>
+        </div>
+        <div class="badges">
+          <span class="badge ${badgeClass}">${badgeText}</span>
+          ${goLiveHtml}
+          ${jiraHtml}
+        </div>
+      </div>
+      <div class="track-wrap">
+        <div class="track-bg"><div class="track-done" style="width:${fillPct}%"></div></div>
+        <div class="env" style="left:calc(${envLeft}% * (100% - 30px) / 100% + 15px)">✉️</div>
+        <div class="dots">${dots}</div>
+      </div>
+    </div>
+    <div class="detail-panel" id="dp-${idx}">
+      <div class="detail-grid">${details}</div>
+    </div>
+  </div>`;
+}
+
+function toggle(idx) {
+  const dp = document.getElementById('dp-' + idx);
+  const chev = document.getElementById('chev-' + idx);
+  dp.classList.toggle('open');
+  if (chev) chev.classList.toggle('open');
+}
+
+function mapStatus(s) {
+  const t = (s || '').toLowerCase();
+  if (t.includes('live') || t.includes('mail') || t.includes('released') || t.includes('shipped')) return 7;
+  if (t.includes('production') && t.includes('approv')) return 6;
+  if (t.includes('print fulfillment') || t.includes('in print')) return 6;
+  if (t.includes('client') && t.includes('proof')) return 5;
+  if (t.includes('vendor') || t.includes('vendor proof')) return 4;
+  if (t.includes('proof') || t.includes('in progress')) return 3;
+  if (t.includes('config') || t.includes('requirements')) return 2;
+  return 1;
+}
+
+function isBlocked(status, notes) {
+  const s = (status + ' ' + notes).toLowerCase();
+  return s.includes('awaiting') || s.includes('waiting for client') || s.includes('waiting for updated') || s.includes('blocked');
+}
+
+function parseTicketsTable(content) {
+  const lines = content.split('\n');
+  const hIdx = lines.findIndex(l => l.includes('Ticket Owner') && l.includes('|'));
+  if (hIdx === -1) return null;
+
+  const headers = lines[hIdx].split('|').map(s => s.trim()).filter(Boolean);
+  const clients = [];
+
+  for (let i = hIdx + 2; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line.startsWith('|')) break;
+    const cells = line.split('|').map(s => s.trim()).filter(Boolean);
+    if (cells.length < 3) continue;
+
+    const get = (key) => {
+      const idx = headers.findIndex(h => h.toLowerCase().includes(key.toLowerCase()));
+      return idx >= 0 ? (cells[idx] || '') : '';
+    };
+
+    const owner = get('Ticket Owner');
+    if (!owner.includes('Jacquelyn')) continue;
+
+    const org = get('Organization');
+    const account = get('Account/Group');
+    const goLive = get('Go Live Date');
+    const url = get('URL');
+    const status = get('Status');
+    const notes = get('Additional Notes');
+
+    if (!org) continue;
+
+    const stage = mapStatus(status);
+    const blocked = isBlocked(status, notes);
+    const stageNotes = Array(7).fill('');
+    if (notes) stageNotes[Math.max(0, stage - 1)] = notes;
+
+    clients.push({ clientName: org, account, currentStage: stage, goLiveDate: goLive, jiraUrl: url, blocked, stageNotes });
+  }
+
+  return clients.length ? clients : null;
+}
+
+function parseIMPTracker(content) {
+  const lines = content.split('\n');
+  const hIdx = lines.findIndex(l => /Client Name.*Account.*Stage 1/i.test(l) && l.includes('|'));
+  if (hIdx === -1) return null;
+
+  const headers = lines[hIdx].split('|').map(s => s.trim()).filter(Boolean);
+  const clients = [];
+
+  for (let i = hIdx + 2; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line.startsWith('|')) break;
+    const cells = line.split('|').map(s => s.trim()).filter(Boolean);
+    if (cells.length < 3 || !cells[0]) continue;
+
+    const get = (key) => {
+      const idx = headers.findIndex(h => h.toLowerCase().includes(key.toLowerCase()));
+      return idx >= 0 ? (cells[idx] || '') : '';
+    };
+
+    const stageNotes = [];
+    for (let s = 1; s <= 7; s++) {
+      const note = get(`Stage ${s} Note`);
+      stageNotes.push(note);
+    }
+
+    const blocked = get('Blocked').toLowerCase() === 'yes';
+    const stageStatuses = [];
+    let currentStage = 1;
+    for (let s = 1; s <= 7; s++) {
+      const st = (get(`Stage ${s} Status`) || '').toLowerCase();
+      stageStatuses.push(st);
+      if (st === 'complete') currentStage = s + 1;
+      else if (st === 'in progress' && currentStage < s) currentStage = s;
+    }
+    currentStage = Math.min(7, currentStage);
+
+    clients.push({
+      clientName: get('Client Name'),
+      account: get('Account/Group'),
+      currentStage,
+      goLiveDate: get('Go Live Date'),
+      jiraUrl: get('Jira URL'),
+      blocked,
+      stageNotes
+    });
+  }
+
+  return clients.length ? clients : null;
+}
+
+function fallbackData() {
+  return [
+    { clientName: 'Wellyfe', account: 'Prairie Star Health', currentStage: 6, goLiveDate: '7/1/2026', jiraUrl: 'https://rxsense.atlassian.net/browse/FM-5388', blocked: false, stageNotes: ['Kickoff complete', 'Config confirmed — BIN 610568, RXS, Clarity. Vendor: Clarity.', 'Initial proofs provided to vendor', 'Clarity reviewed and returned proofs', 'Client reviewed proofs — production proof approved', 'Production Proof Approved · Prod proofs released to mail. Awaiting shipment confirmation.', ''] },
+    { clientName: 'AffirmedRx', account: 'Aligned Member ID Cards', currentStage: 1, goLiveDate: '', jiraUrl: 'https://rxsense.atlassian.net/browse/FM-5385', blocked: true, stageNotes: ['Intake open · Logo resolution too low. Relayed to Clarity. Waiting for updated logos from client.', '', '', '', '', '', ''] },
+    { clientName: 'UNC Health', account: 'Q3 Disruption Letters', currentStage: 6, goLiveDate: '', jiraUrl: 'https://rxsense.atlassian.net/browse/FM-5441', blocked: false, stageNotes: ['Kickoff complete', 'Config confirmed', 'Proofs provided', 'Vendor review complete', 'Disruption production proofs sent to client', 'In Print Fulfillment · Waiting for client approval to release and mail.', ''] },
+    { clientName: 'TrueRx', account: 'Kelley Health — New Client', currentStage: 1, goLiveDate: '', jiraUrl: 'https://rxsense.atlassian.net/browse/FM-5529', blocked: false, stageNotes: ['Intake open · Created based off request in comments (SDHD-39601). Parent SDHD-40010 created.', '', '', '', '', '', ''] }
+  ];
+}
+
+async function loadData() {
+  document.getElementById('main-content').innerHTML = '<div class="loading"><div class="spinner"></div><div>Fetching from Member Comms Directory OPS...</div></div>';
+  document.getElementById('footer').textContent = '';
+
+  try {
+    const r = await window.cowork.callMcpTool(
+      'mcp__51e71b12-c295-4776-979b-002eee43853e__read_file_content',
+      { fileId: '1hGxEl7ikXiN7v8rDjrXFegKuRa1JgzDrh0ZPtcl-ddE' }
+    );
+
+    let content = '';
+    try {
+      const sc = r.structuredContent;
+      content = sc ? sc.fileContent : JSON.parse(r.content[0].text).fileContent;
+    } catch(e) {
+      content = (r.content && r.content[0] && r.content[0].text) || '';
+    }
+
+    let clients = parseIMPTracker(content) || parseTicketsTable(content);
+
+    if (!clients || clients.length === 0) {
+      clients = fallbackData();
+      document.getElementById('subtitle').textContent = 'Loaded from sheet · IMP Tracker tab not yet set up — showing current tickets';
+    } else {
+      document.getElementById('subtitle').textContent = 'Live · Member Comms Directory OPS · ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    allClients = clients;
+    render();
+    document.getElementById('footer').textContent = 'Last refreshed: ' + new Date().toLocaleString();
+
+  } catch(err) {
+    allClients = fallbackData();
+    render();
+    document.getElementById('subtitle').textContent = 'Showing cached data — could not reach sheet';
+    document.getElementById('footer').textContent = 'Error fetching sheet. Check Drive connection.';
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
