@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation Status — Prairie Star Health</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #F2F4F7; color: #1a1a2e; min-height: 100vh; }
+
+.page { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
+
+.brand-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+.brand { font-size: 13px; font-weight: 600; color: #0A3D62; letter-spacing: 0.5px; text-transform: uppercase; }
+.brand span { color: #1D9E75; }
+.updated { font-size: 12px; color: #9aa; }
+
+.hero { background: white; border-radius: 16px; padding: 28px 32px 32px; border: 1px solid #e4e6ea; margin-bottom: 16px; }
+.client-label { font-size: 11px; font-weight: 600; color: #1D9E75; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+.client-name { font-size: 24px; font-weight: 700; color: #0A3D62; margin-bottom: 2px; }
+.impl-type { font-size: 14px; color: #778; margin-bottom: 24px; }
+.meta-row { display: flex; gap: 24px; margin-bottom: 28px; }
+.meta-item { }
+.meta-label { font-size: 11px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.meta-value { font-size: 13px; font-weight: 600; color: #1a1a2e; }
+
+.status-banner { background: #E8F8F2; border: 1px solid #A8DFC9; border-radius: 10px; padding: 14px 18px; margin-bottom: 28px; display: flex; align-items: flex-start; gap: 12px; }
+.status-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.status-text { }
+.status-title { font-size: 14px; font-weight: 600; color: #0A5C3A; margin-bottom: 3px; }
+.status-desc { font-size: 13px; color: #1D6E4E; line-height: 1.5; }
+
+.timeline-section { margin-bottom: 8px; }
+.timeline-label { font-size: 11px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+.track-outer { position: relative; }
+.track-row { position: relative; height: 44px; margin: 0 20px; }
+.track-bg { position: absolute; top: 14px; left: 0; right: 0; height: 4px; background: #E8EAF0; border-radius: 3px; }
+.track-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #1D9E75, #27AE8A); }
+.env { position: absolute; top: -1px; font-size: 22px; transform: translateX(-50%); z-index: 5; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.15)); }
+.dots-row { display: flex; justify-content: space-between; position: relative; }
+.dot-col { display: flex; flex-direction: column; align-items: center; width: calc(100% / 7); }
+.dot { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; z-index: 3; border: 2.5px solid #E0E3EA; background: white; color: #ccc; }
+.dot.done { background: #1D9E75; border-color: #1D9E75; color: white; font-size: 14px; }
+.dot.current { border-color: #0A3D62; border-width: 3px; color: #0A3D62; font-size: 11px; font-weight: 800; }
+.dot-lbl { font-size: 9.5px; color: #bbb; text-align: center; margin-top: 6px; line-height: 1.3; max-width: 56px; font-weight: 500; }
+.dot-lbl.done-lbl { color: #1D9E75; }
+.dot-lbl.cur-lbl { color: #0A3D62; font-weight: 700; }
+
+.milestones { display: flex; flex-direction: column; gap: 8px; }
+.ms-card { background: white; border: 1px solid #e4e6ea; border-radius: 10px; padding: 14px 18px; display: flex; align-items: flex-start; gap: 14px; }
+.ms-card.ms-done { border-left: 3px solid #1D9E75; background: #FBFFFE; }
+.ms-card.ms-current { border-left: 3px solid #0A3D62; background: #FAFBFF; box-shadow: 0 2px 8px rgba(10,61,98,0.08); }
+.ms-card.ms-pending { opacity: 0.5; }
+.ms-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.icon-done { background: #E8F8F2; color: #1D9E75; font-size: 14px; }
+.icon-current { background: #EBF0F8; color: #0A3D62; }
+.icon-pending { background: #F2F4F7; color: #ccc; }
+.ms-body { }
+.ms-name { font-size: 13px; font-weight: 600; color: #1a1a2e; margin-bottom: 3px; }
+.ms-note { font-size: 12px; color: #667; line-height: 1.5; }
+.ms-note.current-note { color: #334; font-size: 13px; }
+.ms-status { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.st-done { color: #1D9E75; }
+.st-current { color: #0A3D62; }
+.st-pending { color: #ccc; }
+
+.footer { margin-top: 28px; background: white; border-radius: 12px; padding: 20px 24px; border: 1px solid #e4e6ea; display: flex; justify-content: space-between; align-items: center; }
+.footer-contact { }
+.footer-q { font-size: 12px; color: #aaa; margin-bottom: 3px; }
+.footer-email { font-size: 13px; font-weight: 600; color: #0A3D62; }
+.footer-note { font-size: 11px; color: #ccc; text-align: right; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand-bar">
+    <div class="brand">Rx<span>Sense</span> · Member Communications</div>
+    <div class="updated">Last updated: June 18, 2026</div>
+  </div>
+
+  <div class="hero">
+    <div class="client-label">Implementation Status</div>
+    <div class="client-name">Prairie Star Health</div>
+    <div class="impl-type">Member ID Card Program · Wellyfe</div>
+
+    <div class="meta-row">
+      <div class="meta-item">
+        <div class="meta-label">Go-Live Date</div>
+        <div class="meta-value">July 1, 2026</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Vendor</div>
+        <div class="meta-value">Clarity</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Overall Progress</div>
+        <div class="meta-value">Step 7 of 7</div>
+      </div>
+    </div>
+
+    <div class="status-banner">
+      <div class="status-icon">📬</div>
+      <div class="status-text">
+        <div class="status-title">Member communications are in the mailing process</div>
+        <div class="status-desc">Production proofs were approved and your member ID cards have been released to print and mail. Members can expect to receive their cards around the go-live date of July 1, 2026. We will confirm shipment once it is completed.</div>
+      </div>
+    </div>
+
+    <div class="timeline-section">
+      <div class="timeline-label">Implementation Milestones</div>
+      <div class="track-outer">
+        <div class="track-row">
+          <div class="track-bg"><div class="track-fill" style="width:100%"></div></div>
+          <div class="env" style="left:98%">✉️</div>
+        </div>
+        <div class="dots-row">
+          <div class="dot-col"><div class="dot done">✓</div><div class="dot-lbl done-lbl">Kickoff</div></div>
+          <div class="dot-col"><div class="dot done">✓</div><div class="dot-lbl done-lbl">Config</div></div>
+          <div class="dot-col"><div class="dot done">✓</div><div class="dot-lbl done-lbl">Proofs</div></div>
+          <div class="dot-col"><div class="dot done">✓</div><div class="dot-lbl done-lbl">Vendor Review</div></div>
+          <div class="dot-col"><div class="dot done">✓</div><div class="dot-lbl done-lbl">Approval</div></div>
+          <div class="dot-col"><div class="dot done">✓</div><div class="dot-lbl done-lbl">Production</div></div>
+          <div class="dot-col"><div class="dot current">▶</div><div class="dot-lbl cur-lbl">Mailing</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="milestones">
+    <div class="ms-card ms-done">
+      <div class="ms-icon icon-done">✓</div>
+      <div class="ms-body">
+        <div class="ms-status st-done">Complete</div>
+        <div class="ms-name">Kickoff &amp; Intake</div>
+        <div class="ms-note">Implementation kickoff completed. Requirements documented and confirmed.</div>
+      </div>
+    </div>
+    <div class="ms-card ms-done">
+      <div class="ms-icon icon-done">✓</div>
+      <div class="ms-body">
+        <div class="ms-status st-done">Complete</div>
+        <div class="ms-name">Configuration &amp; Requirements</div>
+        <div class="ms-note">Member card configuration confirmed — BIN, plan details, and design specifications finalized.</div>
+      </div>
+    </div>
+    <div class="ms-card ms-done">
+      <div class="ms-icon icon-done">✓</div>
+      <div class="ms-body">
+        <div class="ms-status st-done">Complete</div>
+        <div class="ms-name">Initial Proofs Created</div>
+        <div class="ms-note">Initial member card proofs created and submitted to print vendor (Clarity).</div>
+      </div>
+    </div>
+    <div class="ms-card ms-done">
+      <div class="ms-icon icon-done">✓</div>
+      <div class="ms-body">
+        <div class="ms-status st-done">Complete</div>
+        <div class="ms-name">Vendor Proof Review</div>
+        <div class="ms-note">Clarity reviewed and approved the proof specifications.</div>
+      </div>
+    </div>
+    <div class="ms-card ms-done">
+      <div class="ms-icon icon-done">✓</div>
+      <div class="ms-body">
+        <div class="ms-status st-done">Complete</div>
+        <div class="ms-name">Client Proof Approval</div>
+        <div class="ms-note">Production proofs reviewed and approved by your team.</div>
+      </div>
+    </div>
+    <div class="ms-card ms-done">
+      <div class="ms-icon icon-done">✓</div>
+      <div class="ms-body">
+        <div class="ms-status st-done">Complete</div>
+        <div class="ms-name">Production Release</div>
+        <div class="ms-note">Final approval confirmed. Member communications released for production.</div>
+      </div>
+    </div>
+    <div class="ms-card ms-current">
+      <div class="ms-icon icon-current">▶</div>
+      <div class="ms-body">
+        <div class="ms-status st-current">In Progress</div>
+        <div class="ms-name">Mailing</div>
+        <div class="ms-note current-note">Member ID cards are being printed and mailed to your members. Estimated member delivery: July 1, 2026. Shipment confirmation will be provided once completed.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-contact">
+      <div class="footer-q">Questions about this implementation?</div>
+      <div class="footer-email">jbrown@rxsense.com</div>
+    </div>
+    <div class="footer-note">Prepared by RxSense Member Communications<br>This status reflects information as of June 18, 2026</div>
+  </div>
+
+</div>
+</body>
+</html>
